@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/autoload.php';
+
 use Config\Modules\Logging\LoggingConfig;
 use Logging\Infrastructure\LoggingKernel;
-
-require_once __DIR__ . '/autoload.php';
 
 $loggingDirectory = __DIR__ . '/log/';
 $loggingConfig = new LoggingConfig($loggingDirectory);
