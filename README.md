@@ -6,9 +6,178 @@ A **Logging Module** for PHP 8 that provides structured, secure log writing to f
 
 ## General Description
 
-This module’s primary purpose is to offer a robust logging solution in pure PHP. It addresses common logging needs such as categorizing logs by level (info, warning, error, etc.), including contextual data with log messages, and writing outputs to log files. Additionally, it tackles security concerns by validating inputs and masking sensitive information (like passwords or personal identifiers) before writing to disk.
+This Logging Module is a comprehensive, security-focused solution for PHP 8+ applications, engineered as a pure PHP module with no external library dependencies. It provides a robust and structured mechanism for writing logs to the local filesystem, built upon a layered architecture that enforces a strict separation of concerns between domain logic, application services, and infrastructure. A primary focus of the module is security, featuring automated sanitization of sensitive data and rigorous input validation to ensure data integrity and prevent information leaks. It is fully PSR-3 compliant, ensuring seamless integration with third-party libraries and modern frameworks. The module offers developers a reliable, maintainable, and secure logging foundation, centralizing logging logic and promoting best practices for data handling.
 
-In context, the Logging Module can be used in web applications, CLI scripts, or any PHP project that requires structured logging. It helps developers track events and debug issues by creating timestamped log entries in an organized file structure (for example, separate files per log level or channel). By using this module, applications gain a consistent logging interface and avoid scattering file write logic and data sanitation code throughout the codebase.
+#### Features
+
+* **Advanced Security & Sanitization:** Automatically sanitizes log data by masking sensitive keys (e.g., `password`, `api_key`) and values matching configurable regex patterns (e.g., PII, credit cards). Includes advanced credential phrase detection to redact secrets from free-form messages.
+* **Domain-Driven & Immutable Architecture:** Utilizes a multi-layer architecture with immutable Value Objects to guarantee that only validated, sanitized, and secure data enters the logging pipeline. This fail-fast design prevents data corruption and enforces strict domain invariants.
+* **PSR-3 Compatibility:** Includes a PSR-3 compliant adapter, allowing the module to be used as a drop-in replacement wherever a `Psr\Log\LoggerInterface` is expected, ensuring seamless integration with frameworks and third-party libraries.
+* **Structured File Organization:** Automatically organizes log files into a clean directory structure based on channel and severity level (e.g., `/logs/security/critical.log`), making logs easy to navigate and analyze.
+* **Robust Context & Data Handling:** Supports rich contextual data with every log entry. The sanitization engine can recursively process deeply nested arrays and objects, featuring built-in circular reference detection to prevent infinite loops and ensure stability.
+* **Zero-Dependency & Configurable:** Operates as a pure PHP 8+ module with no external Composer dependencies. Configuration is streamlined, requiring only a base log directory to get started, while allowing deep customization of validation rules, sensitive data patterns, and log levels.
+
+---
+
+### **Examples of Use**
+
+Below are practical examples demonstrating how to use the Logging Module in a PHP application, including initialization, basic logging calls, context data, and channels.
+
+---
+
+#### **Example 1: Basic Setup and Logging**
+
+This example shows the typical setup process and how to log messages at various severity levels.
+
+```php
+<?php
+use Config\Modules\Logging\LoggingConfig;
+use Logging\Infrastructure\LoggingKernel;
+
+// 1. Configuration: specify the directory for log files.
+$logDir = __DIR__ . '/logs'; // ensure this directory is writable
+$config = new LoggingConfig($logDir);
+
+// 2. Boot the logging kernel with the configuration.
+$kernel = new LoggingKernel($config);
+
+// 3. Get the logging facade (implements LoggingFacadeInterface).
+$logger = $kernel->logger();
+
+// 4. Log messages at various levels with context data.
+$logger->info("User logged in", ["user" => "alice"]);
+$logger->warning("Disk space low", ["disk" => "/dev/sda1", "free_percent" => 5]);
+$logger->error("File not found", ["file" => "/path/to/file.txt", "error_code" => 404]);
+
+// 5. Use the generic log method for a custom level (if allowed in config).
+$logger->log("notice", "User profile updated", ["user" => "alice"]);
+
+// 6. Logging with a different channel (using logInput to specify channel).
+$logger->logInput("Admin privileges granted", "critical", "security", ["admin" => "bob"]);
+```
+
+**Execution Flow and Output:**
+
+  * **Initialization:** The process begins by instantiating `LoggingConfig` with the desired path for log storage (`$logDir`). This configuration is then passed to the `LoggingKernel`, which bootstraps the entire module.
+  * **Facade Access:** The primary logging interface is retrieved via the `$kernel->logger()` method, which returns a pre-configured facade.
+  * **Standard Logging:** When methods like `$logger->info(...)` are called, they write to a log file corresponding to their level under the default `application` channel. The log entry includes a timestamp, channel, level, message, and the provided context data.
+  * **Channel-Specific Logging:** The `logInput()` method allows for specifying a custom channel, such as `"security"`. This directs the log entry to a different subdirectory, enabling logical separation of logs.
+  * **File Structure:** After running this code, the `logs` directory will contain subfolders for each channel used (`application/`, `security/`), and within them, log files for each level (e.g., `info.log`, `critical.log`). For instance, the first log call creates `logs/application/info.log`, while the last one creates `logs/security/critical.log`.
+
+---
+
+#### **Example 2: Using the PSR-3 Adapter**
+
+For interoperability with external libraries or frameworks that expect a standard `Psr\Log\LoggerInterface`, the module provides a PSR-3 compatible adapter.
+
+```php
+use Logging\Infrastructure\LoggingKernel;
+use Config\Modules\Logging\LoggingConfig;
+// use Psr\Log\LoggerInterface; // if you have psr/log for type hints
+
+$kernel = new LoggingKernel(new LoggingConfig('/var/log/myapp'));
+$psrLogger = $kernel->psrLogger(); // Implements PsrLoggerInterface
+
+// Now $psrLogger can be used wherever a PSR-3 LoggerInterface is required.
+SomeLibrary::setLogger($psrLogger);
+
+// For demonstration, using psrLogger directly:
+$psrLogger->error("Payment failed", ["orderId" => 1001, "amount" => 50.00]);
+$psrLogger->debug("Payment response", ["responsePayload" => "<xml>...</xml>"]);
+```
+
+**Integration and Benefits:**
+
+  * **Seamless Integration:** The `$kernel->psrLogger()` method returns an adapter that implements `PsrLoggerInterface`, allowing it to be used wherever a standard PSR-3 logger is required.
+  * **Centralized Security:** All log calls made through the PSR-3 adapter are processed by the module's internal pipeline. This ensures that any sensitive data passed in the context array is automatically masked according to the central configuration before being written to disk.
+  * **Consistent Output:** The log entries from the example above will be written to `logs/application/error.log` and `logs/application/debug.log`, following the same structured file organization.
+
+---
+
+#### **Example 3: Handling Exceptions from Logging**
+
+To build a more resilient application, you can gracefully handle exceptions that may occur during file write operations, such as when file permissions are incorrect.
+
+```php
+try {
+  $logger->critical("Service outage", ["service" => "database", "duration" => "5m"]);
+} catch (\Logging\Infrastructure\Exception\LogWriteException $e) {
+  // Handle gracefully if writing to file failed
+  error_log("Failed to write to application logs: " . $e->getMessage());
+  // Optionally, fallback to an alternate logging mechanism
+}
+```
+
+**Robust Error Handling Strategy:**
+
+  * By wrapping logging calls in a `try...catch` block, you can prevent the application from crashing if a log cannot be written.
+  * The module throws a specific `\Logging\Infrastructure\Exception\LogWriteException` for file writing failures, which can be caught to trigger contingency logic.
+  * A fallback mechanism, such as using PHP's native `error_log()`, can be implemented in the `catch` block to ensure that critical error information is not silently lost.
+  * While not always necessary in a properly configured environment, this pattern is a best practice for production systems where logging failures should not impact core application availability.
+
+---
+
+### Automated Data Sanitization
+
+A core security feature of the Logging Module is its ability to automatically sanitize data before it is written to disk. This process is designed to prevent the accidental leakage of sensitive information, such as passwords, API keys, or personally identifiable information (PII). Sanitization is transparently applied to all log calls, inspecting both free-form messages and structured context arrays.
+
+The sanitization engine employs a defense-in-depth approach, using several techniques to detect and mask sensitive data:
+
+1.  **Key-Based Masking:** The most reliable method, where values associated with predefined sensitive context keys (e.g., `'password'`, `'secret'`) are fully masked.
+2.  **Pattern-Based Detection:** Values that match configured regular expression patterns (e.g., credit card numbers, national IDs) are identified and masked.
+3.  **Credential Phrase Analysis:** Free-text log messages are scanned for phrases that resemble credentials (e.g., `"password: somevalue"`), and the sensitive part of the phrase is masked.
+
+The following example demonstrates these features in action.
+
+#### **Sanitization Code Example**
+
+```php
+<?php
+use Config\Modules\Logging\LoggingConfig;
+use Logging\Infrastructure\LoggingKernel;
+
+// Standard setup
+$logDir = __DIR__ . '/logs';
+$config = new LoggingConfig($logDir);
+$kernel = new LoggingKernel($config);
+$logger = $kernel->logger();
+
+// --- Sanitization Examples ---
+
+// 1. Logging with sensitive keys in the context array.
+$logger->warning("User authentication attempt failed", [
+    "username" => "j.doe",
+    "password" => "S3cr3t-P@ss!",
+    "apiKey" => "sk_123abc456def"
+]);
+
+// 2. Logging with a value that matches a sensitive pattern.
+$logger->info("Payment transaction processed", [
+    "transactionId" => "txn_78910",
+    "creditCard" => "4987654321098765" 
+]);
+
+// 3. Logging a message containing a credential phrase.
+$logger->error("Legacy system connection error: password: oldsystempassword was rejected", [
+    "system" => "legacy_crm"
+]);
+```
+
+#### **Sanitization in Action**
+
+  * **In the first log (`warning`):** The context array contains the keys `"password"` and `"apiKey"`. The sanitization engine recognizes these as sensitive keys based on the module's configuration and replaces their corresponding values with the default mask token. The `"username"` value remains untouched.
+  * **In the second log (`info`):** The value provided for the `"creditCard"` key (`"4987654321098765"`) matches a configured regular expression pattern for detecting credit card numbers. As a result, the value is fully masked.
+  * **In the third log (`error`):** The message string itself contains the phrase `"password: oldsystempassword"`. The `CredentialPhraseSanitizer` detects this structure and masks the value that follows the key and separator. This provides a layer of protection even when sensitive data is not properly structured in the context.
+
+#### **Expected Log Output**
+
+The resulting content written to the log files (`warning.log`, `info.log`, `error.log`) would look similar to the following, demonstrating that the sensitive data has been replaced with the `[MASKED]` token:
+
+```log
+[2025-06-26T16:55:35-03:00] [application] [WARNING] User authentication attempt failed. | Context: {"username":"j.doe","password":"[MASKED]","apiKey":"[MASKED]"}
+[2025-06-26T16:55:35-03:00] [application] [INFO] Payment transaction processed. | Context: {"transactionId":"txn_78910","creditCard":"[MASKED]"}
+[2025-06-26T16:55:35-03:00] [application] [ERROR] Legacy system connection error: password: [MASKED] was rejected. | Context: {"system":"legacy_crm"}
+```
 
 ---
 
@@ -2840,97 +3009,6 @@ If integrating with a framework (Laravel, Symfony, etc.), you can wrap this modu
 - **Symfony:** Configure a service and inject the path from parameters.
 
 Outside of a framework, using the `LoggingKernel` directly as shown is perfectly fine.
-
----
-
-## Examples of Use
-
-Below are practical examples demonstrating how to use the Logging Module in a PHP application, including initialization, basic logging calls, context data, and channels.
-
----
-
-### Example 1: Basic Setup and Logging
-
-This example shows typical setup and logging at various levels:
-
-```php
-<?php
-use Config\Modules\Logging\LoggingConfig;
-use Logging\Infrastructure\LoggingKernel;
-
-// 1. Configuration: specify the directory for log files.
-$logDir = __DIR__ . '/logs'; // ensure this directory is writable
-$config = new LoggingConfig($logDir);
-
-// 2. Boot the logging kernel with the configuration.
-$kernel = new LoggingKernel($config);
-
-// 3. Get the logging facade (implements LoggingFacadeInterface).
-$logger = $kernel->logger();
-
-// 4. Log messages at various levels with context data.
-$logger->info("User logged in", ["user" => "alice"]);
-$logger->warning("Disk space low", ["disk" => "/dev/sda1", "free_percent" => 5]);
-$logger->error("File not found", ["file" => "/path/to/file.txt", "error_code" => 404]);
-
-// 5. Use the generic log method for a custom level (if allowed in config).
-$logger->log("notice", "User profile updated", ["user" => "alice"]);
-
-// 6. Logging with a different channel (using logInput to specify channel).
-$logger->logInput("Admin privileges granted", "critical", "security", ["admin" => "bob"]);
-```
-
-**What happens in the above code:**
-
-- After setup, `$logger->info(...)` writes to `logs/application/info.log` by default. The line includes a timestamp, channel, level, message, and context.
-- The `warning` and `error` calls go to their respective files (`warning.log`, `error.log`) under the `application` channel.
-- The `log("notice", ...)` call demonstrates using the generic method with a string level.
-- The `logInput(..., "security", ...)` call logs to the `security` channel (`logs/security/critical.log`).
-
-After running this, your `logs` directory will have subfolders (`application/`, `security/`), each containing log files for the levels used.
-
----
-
-### Example 2: Using the PSR-3 Adapter
-
-If you need to supply a logger to a library that expects a PSR-3 logger:
-
-```php
-use Logging\Infrastructure\LoggingKernel;
-use Config\Modules\Logging\LoggingConfig;
-// use Psr\Log\LoggerInterface; // if you have psr/log for type hints
-
-$kernel = new LoggingKernel(new LoggingConfig('/var/log/myapp'));
-$psrLogger = $kernel->psrLogger(); // Implements PsrLoggerInterface
-
-// Now $psrLogger can be used wherever a PSR-3 LoggerInterface is required.
-SomeLibrary::setLogger($psrLogger);
-
-// For demonstration, using psrLogger directly:
-$psrLogger->error("Payment failed", ["orderId" => 1001, "amount" => 50.00]);
-$psrLogger->debug("Payment response", ["responsePayload" => "<xml>...</xml>"]);
-```
-
-- The above will produce entries in `logs/application/error.log` and `logs/application/debug.log`.
-- If the context contains sensitive data, it will be masked according to configuration.
-
----
-
-### Example 3: Handling Exceptions from Logging
-
-You can handle exceptions if you want to avoid your app crashing if logs can't be written:
-
-```php
-try {
-  $logger->critical("Service outage", ["service" => "database", "duration" => "5m"]);
-} catch (\Logging\Infrastructure\Exception\LogWriteException $e) {
-  // Handle gracefully if writing to file failed
-  error_log("Failed to write to application logs: " . $e->getMessage());
-  // Optionally, fallback to an alternate logging mechanism
-}
-```
-
-In most cases, this won't be necessary if the environment is set up correctly, but it's an example of using the exception classes for error handling.
 
 ---
 
