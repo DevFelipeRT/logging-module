@@ -1,1 +1,1 @@
-[2025-06-27T16:01:05+02:00] [application] [DEBUG] This is a custom log message. | Context: {"context":"example","user_id":"123"}
+[2025-06-27T18:25:41+02:00] [application] [DEBUG] This is a custom log message. | Context: {"context":"example","user_id":"123"}
