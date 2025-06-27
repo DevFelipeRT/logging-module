@@ -1,2 +1,2 @@
-[2025-06-26T21:35:27+02:00] [application] [INFO] Logging system initialized successfully. | Context: {"directory":"C:\\xampp\\htdocs\\projetos\\logging-module/log/","config":"{}"}
-[2025-06-26T21:35:27+02:00] [application] [INFO] Gereneric message.
+[2025-06-27T16:01:05+02:00] [application] [INFO] Logging system initialized successfully. | Context: {"directory":"C:\\xampp\\htdocs\\projetos\\logging-module/log/","config":{"object_class":"Config\\Modules\\Logging\\LoggingConfig[PRIVATE_PROPERTIES]"}}
+[2025-06-27T16:01:05+02:00] [application] [INFO] Gereneric message.
