@@ -28,7 +28,7 @@ $logger->error('An error occurred while processing the request.', [
     'password' => 'sensitive_data', // This will be sanitized
 ]);
 
-$logger->logInput('Gereneric message');
+$logger->logInput('Gereneric message. 123abc is password.'); // This will be sanitized
 
 $logger->logInput('Custom channel log.', 'warning', 'custom', [
     'context' => 'Custom channel.',
